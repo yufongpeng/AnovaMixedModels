@@ -1,0 +1,13 @@
+name = "AnovaMixedModels"
+uuid = "ef95db53-6fbd-4fdb-9e3a-2b3ed9b48c88"
+authors = ["yufongpeng <54415349+yufongpeng@users.noreply.github.com> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
