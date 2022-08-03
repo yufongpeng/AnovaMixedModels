@@ -88,7 +88,7 @@ function calcdof(model::LinearMixedModel)
     tuple(df...), dfr
 end
 
-"""
+@doc """
     nestedmodels(model::LinearMixedModel; null::Bool = true, <keyword arguments>)
 
     nestedmodels(::Type{LinearMixedModel}, f::FormulaTerm, tbl; null::Bool = true, wts = [], contrasts = Dict{Symbol, Any}(), verbose::Bool = false, REML::Bool = false)
@@ -96,6 +96,8 @@ end
 Generate nested models from a model or formula and data.
 The null model will be an empty model if the keyword argument `null` is true (default).
 """
+nestedmodels(::Val{:AnovaMixedModels})
+
 nestedmodels(::Type{<: LinearMixedModel}, f::FormulaTerm, tbl; 
                 null::Bool = true, 
                 wts = [], 

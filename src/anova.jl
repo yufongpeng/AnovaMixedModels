@@ -1,7 +1,7 @@
 # ============================================================================================================
 # Main API
 
-"""
+@doc """
     anova(<models>...; test::Type{<: GoodnessOfFit}, <keyword arguments>)
     anova(test::Type{<: GoodnessOfFit}, <models>...; <keyword arguments>)
 
@@ -28,7 +28,11 @@ Other keyword arguments:
 For fitting new models and conducting anova at the same time, see [`anova_lme`](@ref) for `LinearMixedModel`.
 !!! note
     The result with `adjust_sigma` will be slightly deviated from that of model fitted directly by REML.
+!!! note
+    For the computation of degrees of freedom, please see [`calcdof`](@ref)
 """
+anova(::Val{:AnovaMixedModels})
+
 anova(models::Vararg{<: MixedModel}; 
         test::Type{<: GoodnessOfFit} = length(models) > 1 ? LRT : FTest, 
         kwargs...) = 
