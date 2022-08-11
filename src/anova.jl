@@ -25,11 +25,30 @@ Other keyword arguments:
     1. `check`: allows to check if models are nested. Defalut value is true. Some checkers are not implemented now.
     2. `isnested`: true when models are checked as nested (manually or automatically). Defalut value is false. 
 
+Algorithm:
+* F-test: 
+
+    No deviance is computed. F-statistic is computed directly from variance-covariance matrix(vcov).
+    1. Type I:
+
+        First, calculate f as the upper factor of Cholesky factorization of vcov⁻¹ * β.
+
+        Then, for a factor that starts at ith row/column of vcov with n degree of freedom, the f-statistic is Σᵢⁱ⁺ⁿ⁻¹ fₖ²/n.
+    2. Type III: 
+
+        For a factor occupying ith to jth row/column of vcov with n degree of freedom, f-statistic is (β[i:j]' * vcov[i:j, i:j]⁻¹ * β[i:j])/n.
+* LRT:
+
+    The attribute `deviance` is -2loglikelihood for a linear mixed-effect model; deviance computed by Laplace approximation
+    or n-point adaptive Gauss-Hermite quadrature for a generalized linear mixed-effect model. 
+
+    For the ith model, the likelihood ratio is defined as devianceᵢ₋₁ - devianceᵢ.
+
 For fitting new models and conducting anova at the same time, see [`anova_lme`](@ref) for `LinearMixedModel`.
 !!! note
     The result with `adjust_sigma` will be slightly deviated from that of model fitted directly by REML.
 !!! note
-    For the computation of degrees of freedom, please see [`calcdof`](@ref)
+    For the computation of degrees of freedom, please see [`calcdof`](@ref).
 """
 anova(::Val{:AnovaMixedModels})
 

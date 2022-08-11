@@ -10,5 +10,5 @@
 [docs-stable-url]: https://yufongpeng.github.io/AnovaBase.jl/stable/MixedModels
 [ci-img]: https://github.com/yufongpeng/AnovaMixedModels.jl/workflows/CI/badge.svg
 [ci-url]: https://github.com/yufongpeng/AnovaMixedModels.jl/actions?query=workflow%3ACI
-[codecov-img]: https://codecov.io/gh/yufongpeng/AnovaMixedModels.jl/coveage.svg
+[codecov-img]: https://codecov.io/gh/yufongpeng/AnovaMixedModels.jl/branch/main/graph/badge.svg?token=LVGAB9uiWn
 [codecov-url]: https://codecov.io/gh/yufongpeng/AnovaMixedModels.jl
