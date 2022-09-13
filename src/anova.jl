@@ -20,7 +20,7 @@ Return `AnovaResult{M, test, N}`. See [`AnovaResult`](@ref) for details.
 
 ## Other keyword arguments
 * When one model is provided:  
-    1. `type` type of anova (1 or 3). Default value is 1.
+    1. `type` type of anova. Default value is 1.
     2. `adjust_sigma`: whether adjust σ to match that of linear mixed-effect model fitted by REML. The result will be slightly deviated from that of model fitted by REML.
 * When multiple models are provided:  
     1. `check`: allows to check if models are nested. Defalut value is true. Some checkers are not implemented now.
@@ -28,22 +28,17 @@ Return `AnovaResult{M, test, N}`. See [`AnovaResult`](@ref) for details.
 
 # Algorithm
 ## F-test
+No deviance is computed. F-value is computed directly from variance-covariance matrix (`vcov`).
 
-No deviance is computed. F-statistic is computed directly from variance-covariance matrix (`vcov`).
-1. Type I:
-
-    First, calculate `f` as the upper factor of Cholesky factorization of `vcov⁻¹ * β`.
-
-    Then, for a factor that starts from ith row/column of the model matrix with `n` degree of freedom, the f-statistic is `Σᵢⁱ⁺ⁿ⁻¹ fₖ²/n`.
-2. Type III: 
-
-    For a factor occupying ith to jth row/column of the model matrix with `n` degree of freedom, f-statistic is `β[i, ..., j]ᵀ * vcov[i, ..., j; i, ..., j]⁻¹ * β[i, ..., j] / n`.
 ## LRT
+Vector of the given models:
 
-The attribute `deviance` of `AnovaResult` is `-2loglikelihood` and deviance computed by Laplace approximation
-or n-point adaptive Gauss-Hermite quadrature for a linear mixed-effect model and a generalized linear mixed-effect model, respectively. 
+`model = (model₁, ..., modelₙ)`
 
-For the ith model, the likelihood ratio is defined as `devianceᵢ₋₁ - devianceᵢ`.
+The attribute `deviance` of the returned object (`dev`) is a vector of loglikelihoods `-2loglikelihood(modelᵢ)` for a linear mixed-effect model (linear model); 
+unit deviance for a generalized linear mixed-effect model (generalized linear model).
+
+For `modelᵢ`, the likelihood ratio is defined as `devᵢ₋₁ - devᵢ`.
 
 !!! note
     For fitting new models and conducting anova at the same time, see [`anova_lme`](@ref) for `LinearMixedModel`.
