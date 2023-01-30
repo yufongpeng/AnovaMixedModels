@@ -1,48 +1,42 @@
 # ================================================================================
 # IO
-import AnovaBase: AnovaTable, anovatable
-coefnames(model::MixedModel, anova::Val{:anova}) = 
-    vectorize(coefnames(first(model.formula.rhs), anova))
-  
 # anovatable api
-function anovatable(aov::AnovaResult{<: LinearMixedModel, FTest}; kwargs...)
-    AnovaTable(hcat(vectorize.((
+function anovatable(aov::AnovaResult{<: FullModel{M}, FTest}; rownames = prednames(aov)) where {M <: LinearMixedModel}
+    AnovaTable([
                     dof(aov), 
                     dof_residual(aov), 
                     teststat(aov), 
                     pval(aov)
-                    ))...),
+                ],
               ["DOF", "Res.DOF", "F value", "Pr(>|F|)"],
-              ["x$i" for i in eachindex(pval(aov))], 4, 3)
+              rownames, 4, 3)
 end
 
-function anovatable(aov::AnovaResult{<: Tuple, LRT}, 
-                    modeltype1::Union{Type{<: LinearMixedModel}, Type{<: TableRegressionModel{<: GLM.LinearModel}}},
-                    modeltype2::Type{<: LinearMixedModel}; 
-                    kwargs...)
-    if last(aov.model).optsum.REML 
-        AnovaTable(hcat(vectorize.((
+function anovatable(aov::AnovaResult{NestedModels{M, N}, LRT}; 
+                    rownames = string.(1:N)) where {M <: Union{GLM_MODEL, MixedModel}, N}
+    if last(aov.anovamodel.model).optsum.REML 
+        AnovaTable([
                         dof(aov), 
                         [NaN, _diff(dof(aov))...], 
                         dof_residual(aov), 
                         deviance(aov), 
                         teststat(aov), 
                         pval(aov)
-                        ))...),
+                    ],
                 ["DOF", "ΔDOF", "Res.DOF", "-2 logLik", "χ²", "Pr(>|χ²|)"],
-                ["$i" for i in eachindex(pval(aov))], 6, 5)
+                rownames, 6, 5)
     else
-        AnovaTable(hcat(vectorize.((
+        AnovaTable([
                         dof(aov), 
                         [NaN, _diff(dof(aov))...], 
                         dof_residual(aov), 
-                        aic.(aov.model),
-                        bic.(aov.model),
+                        aic.(aov.anovamodel.model),
+                        bic.(aov.anovamodel.model),
                         deviance(aov), 
                         teststat(aov), 
                         pval(aov)
-                        ))...),
+                    ],
                 ["DOF", "ΔDOF", "Res.DOF", "AIC", "BIC", "-2 logLik", "χ²", "Pr(>|χ²|)"],
-                ["$i" for i in eachindex(pval(aov))], 8, 7)
+                rownames, 8, 7)
     end
 end

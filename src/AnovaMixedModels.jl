@@ -6,10 +6,14 @@ import StatsBase: fit!, fit
 import MixedModels: FeMat, createAL, reweight!, getθ,
                      _iscomparable, _criterion,
                      deviance, dof, dof_residual, nobs
-import StatsModels: TableRegressionModel, vectorize, asgn
-import AnovaBase: lrt_nested, formula, anova, nestedmodels, _diff, subformula, dof, dof_residual, deviance, nobs, coefnames
+import StatsModels: RegressionModel, TableRegressionModel, vectorize, asgn
+import AnovaBase: anova, nestedmodels, predictors, lrt_nested, _diff, subformula, dof_asgn,
+                    dof, dof_residual, deviance, nobs, prednames, has_intercept, select_super_interaction,
+                    AnovaTable, anovatable
 
-export anova_lme, lme, glme, calcdof
+export anova_lme, lme, glme
+
+const GLM_MODEL = Union{TableRegressionModel{<: Union{LinearModel, GeneralizedLinearModel}}, LinearModel, GeneralizedLinearModel}
 
 include("anova.jl")
 include("fit.jl")

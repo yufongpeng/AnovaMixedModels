@@ -1,105 +1,91 @@
 # ============================================================================================================
 # Main API
-
-@doc """
-    anova(<models>...; test::Type{<: GoodnessOfFit}, <keyword arguments>)
-    anova(test::Type{<: GoodnessOfFit}, <models>...; <keyword arguments>)
+"""
+    anova(<mixedmodels>...; test::Type{<: GoodnessOfFit}, <keyword arguments>)
+    anova(test::Type{<: GoodnessOfFit}, <mixedmodels>...; <keyword arguments>)
 
 Analysis of variance.
 
 Return `AnovaResult{M, test, N}`. See [`AnovaResult`](@ref) for details.
 
 # Arguments
-* `models`: model objects
+* `mixedmodels`: model objects
     1. `LinearMixedModel` fitted by `AnovaMixedModels.lme` or `fit(LinearMixedModel, ...)`
     2. `GeneralizedLinearMixedModel` fitted by `AnovaMixedModels.glme` or `fit(GeneralizedLinearMixedModel, ...)`
     If mutiple models are provided, they should be nested and the last one is the most complex. The first model can also be the corresponding `GLM` object without random effects.
 * `test`: test statistics for goodness of fit. Available tests are [`LikelihoodRatioTest`](@ref) ([`LRT`](@ref)) and [`FTest`](@ref). The default is based on the model type.
-    1. `LinearMixedModel`: `FTest` for one model fit; `LRT` for nested models.
+    1. `LinearMixedModel`: `FTest` for one model; `LRT` for nested models.
     2. `GeneralizedLinearMixedModel`: `LRT` for nested models.
 
-## Other keyword arguments
+# Other keyword arguments
 * When one model is provided:  
-    1. `type` type of anova. Default value is 1.
+    1. `type`: type of anova (1, 2 or 3). Default value is 1.
     2. `adjust_sigma`: whether adjust σ to match that of linear mixed-effect model fitted by REML. The result will be slightly deviated from that of model fitted by REML.
 * When multiple models are provided:  
     1. `check`: allows to check if models are nested. Defalut value is true. Some checkers are not implemented now.
-    2. `isnested`: true when models are checked as nested (manually or automatically). Defalut value is false. 
-
-# Algorithm
-## F-test
-No deviance is computed. F-value is computed directly from variance-covariance matrix (`vcov`).
-
-## LRT
-Vector of the given models:
-
-`model = (model₁, ..., modelₙ)`
-
-The attribute `deviance` of the returned object (`dev`) is a vector of loglikelihoods `-2loglikelihood(modelᵢ)` for a linear mixed-effect model (linear model); 
-unit deviance for a generalized linear mixed-effect model (generalized linear model).
-
-For `modelᵢ`, the likelihood ratio is defined as `devᵢ₋₁ - devᵢ`.
 
 !!! note
     For fitting new models and conducting anova at the same time, see [`anova_lme`](@ref) for `LinearMixedModel`.
 !!! note
     The result with `adjust_sigma` will be slightly deviated from that of model fitted directly by REML.
 !!! note
-    For the computation of degrees of freedom, please see [`calcdof`](@ref).
+    For the computation of degrees of freedom, please see [`dof_residual_pred`](@ref).
 """
-anova(::Val{:AnovaMixedModels})
+anova(::Type{<: GoodnessOfFit}, ::MixedModel)
 
-anova(models::Vararg{<: MixedModel}; 
+anova(models::Vararg{M}; 
         test::Type{<: GoodnessOfFit} = length(models) > 1 ? LRT : FTest, 
-        kwargs...) = 
+        kwargs...) where {M <: MixedModel} = 
     anova(test, models...; kwargs...)
 
 # ==================================================================================================================
 # ANOVA by F test
 # Linear mixed-effect models
+anova(::Type{FTest}, model::M; type::Int = 1, kwargs...) where {M <: LinearMixedModel} = 
+    anova(FTest, FullModel(model, type, true, true); kwargs...)
 
 function anova(::Type{FTest}, 
-        model::LinearMixedModel; 
-        type::Int = 1, 
-        adjust_sigma::Bool = true,
-        kwargs...)
+        aovm::FullModel{M};
+        adjust_sigma::Bool = true) where {M <: LinearMixedModel}
 
-    type == 2           && throw(ArgumentError("Type 2 anova is not implemented"))
-    type in [1, 2, 3]   || throw(ArgumentError("Invalid type"))
-
-    varβ = vcov(model) 
-    β = fixef(model)
-
-    assign = asgn(first(model.formula.rhs))
-
+    f = formula(aovm.model)
+    assign = asgn(predictors(aovm))
+    fullasgn = asgn(f.rhs[1])
+    df = dof_asgn(assign)
+    dfr = dof_residual_pred(aovm)
     # calculate degree of freedom for factors and residuals
-    df, resdf = calcdof(model)
-
+    varβ = vcov(aovm.model) 
+    β = fixef(aovm.model)
     # use MMatrix/SizedMatrix ?
-    if type == 1
-        fs = abs2.(cholesky(Hermitian(inv(varβ))).U  * β)
+    offset = first(assign) + last(fullasgn) - last(assign) - 1
+    adjust = 1.0
+    aovm.model.optsum.REML || adjust_sigma && (adjust = (nobs(aovm.model) - length(β)) / nobs(aovm.model)) 
+    if aovm.type == 1
+        fs = abs2.(cholesky(Hermitian(inv(varβ))).U * β)
         # adjust σ like linear regression
-        adjust = 1.0
-        offset = first(assign) - 1
-        model.optsum.REML || adjust_sigma && (adjust = (nobs(model) - length(β)) / nobs(model)) 
-        fstat = ntuple(last(assign) - offset) do fix
-            sum(fs[findall(==(fix + offset), assign)]) / df[fix] * adjust
+        fstat = ntuple(last(fullasgn) - offset) do fix
+            sum(fs[findall(==(fix + offset), fullasgn)]) / df[fix] * adjust
+        end
+    elseif aovm.type == 2
+        fstat = ntuple(last(fullasgn) - offset) do fix
+            select1 = sort!(collect(select_super_interaction(f.rhs[1], fix + offset)))
+            select2 = setdiff(select1, fix + offset)
+            select1 = findall(in(select1), fullasgn)
+            select2 = findall(in(select2), fullasgn)
+            (β[select1]' * (varβ[select1, select1] \ β[select1]) - β[select2]' * (varβ[select2, select2] \ β[select2])) / df[fix] * adjust
         end
     else 
         # calculate block by block
-        adjust = 1.0
-        model.optsum.REML || adjust_sigma && (adjust = (nobs(model) - length(β)) / nobs(model)) 
-        offset = first(assign) - 1
-        fstat = ntuple(last(assign) - offset) do fix
-            select = findall(==(fix + offset), assign)
+        fstat = ntuple(last(fullasgn) - offset) do fix
+            select = findall(==(fix + offset), fullasgn)
             β[select]' * (varβ[select, select] \ β[select]) / df[fix] * adjust
         end
     end
 
     pvalue = ntuple(lastindex(fstat)) do id
-            ccdf(FDist(df[id], resdf[id]), abs(fstat[id]))
+        ccdf(FDist(df[id], dfr[id]), abs(fstat[id]))
     end
-    AnovaResult{FTest}(model, type, df, ntuple(x->NaN, length(fstat)), fstat, pvalue, (resdof = resdf,))
+    AnovaResult{FTest}(aovm, df, ntuple(x->NaN, length(fstat)), fstat, pvalue, (dof_residual = dfr,))
 end
 
 #=
@@ -115,24 +101,22 @@ end
 # ANOVA by Likehood-ratio test 
 # Linear mixed-effect models
 
-function anova(::Type{LRT}, model::LinearMixedModel; kwargs...)
+function anova(::Type{LRT}, model::M) where {M <: LinearMixedModel}
     # check if fitted by ML 
     # nested random effects for REML ?
     model.optsum.REML && throw(
         ArgumentError("""Likelihood-ratio tests for REML-fitted models are only valid when the fixed-effects specifications are identical"""))
     @warn "Fit all submodels"
     models = nestedmodels(model; null = isnullable(model))
-    anova(LRT, models...; check = false, isnested = true)
+    anova(LRT, models)
 end
 
 # =================================================================================================================
 # Nested models 
 
 function anova(::Type{LikelihoodRatioTest}, 
-                models::Vararg{<: MixedModel}; 
-                check::Bool = true,
-                isnested::Bool = false,
-                kwargs...)
+                models::Vararg{M}; 
+                check::Bool = true) where {M <: MixedModel}
 
     check && (_iscomparable(models...) || throw(
         ArgumentError("""Models are not comparable: are the objectives, data and, where appropriate, the link and family the same?""")))
@@ -142,26 +126,30 @@ function anova(::Type{LikelihoodRatioTest},
     ord = sortperm(collect(df))
     df = df[ord]
     models = models[ord]
-    lrt_nested(models, df, deviance.(models), 1)
+    lrt_nested(NestedModels{M}(models), df, deviance.(models), 1)
 end
+
+anova(::Type{LikelihoodRatioTest}, aovm::NestedModels{M}) where {M <: MixedModel} = 
+    lrt_nested(aovm, dof.(aovm.model), deviance.(aovm.model), 1)
 
 #=
 function anova(::Type{LikelihoodRatioTest}, 
                 models::Vararg{<: GeneralizedLinearMixedModel}; 
                 check::Bool = true,
-                isnested::Bool = false,
                 kwargs...)
     # need new nestedmodels
 end
 =#
 
 # Compare to GLM
-function anova(m0::Union{TableRegressionModel{<: Union{LinearModel, GeneralizedLinearModel}}, LinearModel, GeneralizedLinearModel},
+anova(m0::M, m1::T, ms::Vararg{T}; type::Int = 1, kwargs...) where {M <: GLM_MODEL, T <: MixedModel} = anova(LRT, m0, m1, ms...; kwargs...)
+function anova(
+                ::Type{LikelihoodRatioTest}, 
+                m0::M,
                 m::T,
                 ms::Vararg{T};
-                check::Bool = true,
-                isnested::Bool = false,
-                kwargs...) where {T <: MixedModel}
+                check::Bool = true
+            ) where {M <: GLM_MODEL, T <: MixedModel}
     # Contain _isnested (by QR) and test on formula
     check && (_iscomparable(m0, m) || throw(
         ArgumentError("""Models are not comparable: are the objectives, data and, where appropriate, the link and family the same?""")))
@@ -175,8 +163,11 @@ function anova(m0::Union{TableRegressionModel{<: Union{LinearModel, GeneralizedL
     # isnested is not part of _iscomparable:  
     # isnested = true 
     dev = (_criterion(m0), deviance.(models[2:end])...)
-    lrt_nested(models, df, dev, 1)
+    lrt_nested(NestedModels{Union{M, T}}(models), df, dev, 1)
 end
+
+anova(::Type{LikelihoodRatioTest}, aovm::NestedModels{M}) where {M <:  Union{GLM_MODEL, MixedModel}} = 
+    lrt_nested(aovm, df = dof.(aovm.model), deviance_mixedmodel.(aovm.model), 1)
 
 # =================================================================================================================================
 # Fit new models
@@ -186,18 +177,21 @@ end
 
     anova_lme(test::Type{<: GoodnessOfFit}, f::FormulaTerm, tbl; <keyword arguments>)
 
-    anova(test::Type{<: GoodnessOfFit}, ::Type{<: LinearMixedModel}, f::FormulaTerm, tbl;
-            type::Int = 1, 
-            adjust_sigma::Bool = true, <keyword arguments>)
+    anova(test::Type{<: GoodnessOfFit}, ::Type{<: LinearMixedModel}, f::FormulaTerm, tbl; <keyword arguments>)
 
 ANOVA for linear mixed-effect models.
 
-The arguments `f` and `tbl` are `Formula` and `DataFrame`.
+# Arguments
+* `f`: a `Formula`.
+* `tbl`: a `Tables.jl` compatible data.
 * `test`: `GoodnessOfFit`. The default is `FTest`.
-* `type`: type of anova (1 or 3). Default value is 1.
+
+# Keyword arguments
+* `test`: `GoodnessOfFit`. The default is `FTest`.
+* `type`: type of anova (1, 2 or 3). Default value is 1.
 * `adjust_sigma`: whether adjust σ to match that of linear mixed-effect model fitted by REML. The result will be slightly deviated from that of model fitted by REML.
 
-Other keyword arguments
+# Other keyword arguments
 * `wts = []`
 * `contrasts = Dict{Symbol,Any}()`
 * `progress::Bool = true`
@@ -217,14 +211,13 @@ anova_lme(test::Type{<: GoodnessOfFit}, f::FormulaTerm, tbl;
     anova(test, LinearMixedModel, f, tbl; kwargs...)
 
 function anova(test::Type{<: GoodnessOfFit}, ::Type{<: LinearMixedModel}, f::FormulaTerm, tbl; 
-        type::Int = 1, 
-        adjust_sigma::Bool = true,
         wts = [], 
         contrasts = Dict{Symbol,Any}(), 
         progress::Bool = true, 
-        REML::Bool = test == FTest ? true : false)
+        REML::Bool = test == FTest ? true : false, 
+        kwargs...)
     model = lme(f, tbl; wts, contrasts, progress, REML)
-    anova(test, model; type, adjust_sigma)
+    anova(test, model; kwargs...)
 end
 
 """
