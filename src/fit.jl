@@ -1,112 +1,88 @@
 # ==========================================================================================================
-# Backend funcion
+predictors(model::T) where {T <: MixedModel} = first(formula(model).rhs).terms
 
-formula(model::MixedModel) = model.formula
+deviance_mixedmodel(model::MixedModel) = deviance(model)
+deviance_mixedmodel(model::GLM_MODEL) = _criterion(model)
 
 lhs_no_intercept(lhs::String) = Set([lhs])
 lhs_no_intercept(lhs) = Set(filter!(!=("(Intercept)"), lhs))
 
 """
-    calcdof(model::LinearMixedModel)
+    dof_residual_pred(model::LinearMixedModel)
+    dof_residual_pred(aovm::FullModel{LinearMixedModel})
 
-Calculate degree of freedom of factors and residuals for linear mixed effect models
-DOF of residuals are estimated by between-within method: dofᵢ = nobsᵢ - dofᵢ₋₁ - nfixᵢ
+Compute degrees of freedom (DOF) of residuals for each predictors in a linear mixed effect models.
 
-Reference algorithm: [GLMM FAQ](https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#why-doesnt-lme4-display-denominator-degrees-of-freedomp-values-what-other-options-do-i-have) for details.
+DOF of residuals are estimated by between-within method. For details, please refer to the documentation or [GLMM FAQ](https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#why-doesnt-lme4-display-denominator-degrees-of-freedomp-values-what-other-options-do-i-have) for details.
+
+To be noticed, my implementation is a little different from the reference one. 
+When intercept is not in fix effects, the reference algorithm regards the first term as intercept; however, there is no such replacement here. 
 """
-function calcdof(model::LinearMixedModel)
+function dof_residual_pred(model::LinearMixedModel)
     randoms = collect(formula(model).rhs) # ranef formula terms
     fixs = popfirst!(randoms) # fixef formula terms
-    nfac = length(fixs.terms) # number of factors
-    isempty(randoms) && (return repeat([nobs(model) - nfac], nfac))
+    isempty(randoms) && (return repeat([nobs(model) - length(fixs.terms)], length(fixs.terms)))
     reterms = reverse(model.reterms) # Vector of ReMat
-    fixef = model.feterm.cnames # fixef name
-    nfix = length(fixef) # number of fix effects
+    fixname = collect(model.feterm.cnames) # fixef name
+    n0 = has_intercept(fixs) ? (popfirst!(fixname); 1) : 0
 
     # Determine affected fix effects for each random effects
-    affectfixef = Dict{String, Set{String}}()
+    affectfixname = Dict{String, Set{String}}()
     for pair in randoms
-        lhs = coefnames(pair.lhs)
-        lhs = lhs_no_intercept(lhs)
-        rhs = coefnames(pair.rhs, Val(:anova))
-        haskey(affectfixef, rhs) ? union!(affectfixef[rhs], lhs) : push!(affectfixef, rhs => lhs)
+        union!(get!(affectfixname, prednames(pair.rhs), Set{String}()), lhs_no_intercept(coefnames(pair.lhs)))
     end 
 
     # Determines if fix effects vary at each random effects group
-    within = zeros(Bool, nfix, size(reterms, 1) + 2)
-    for (reid, remat) in enumerate(reterms)
+    within = mapreduce(hcat, reterms) do remat
         levels = unique(remat.refs)
-        within[:, reid + 1] .= map(1:nfix) do fixid
+        map(eachindex(fixname)) do fixid
             all(levels) do level
-                vals = view(model.Xymat.wtxy, findall(==(level), remat.refs), fixid)
-                val = first(vals)
-                for i in vals
-                    i != val && (return false)
-                end
-                true
+                vals = view(model.Xymat.wtxy, findall(==(level), remat.refs), fixid + n0)
+                all(==(first(vals)), vals)
             end
         end
-    end 
-    within[:, 1] = repeat([false], nfix) # population level
-    within[1, 1] = true
-    within[:, end] = repeat([true], nfix) # observation level
+    end
+    within = [within repeat([true], length(fixname))] # observation level
 
     # Turn affected fix effects into true
-    ranef = ["", coefnames.(getproperty.(reterms, :trm), Val(:anova))..., ""]
-    for (key, value) in affectfixef
-        id = findfirst(in(value), fixef)
-        isnothing(id) || (within[id, findfirst(==(key), ranef)] = true)
+    randname = prednames.(getproperty.(reterms, :trm))
+    for (key, value) in affectfixname
+        id = findfirst(in(value), fixname)
+        isnothing(id) || (within[id, findfirst(==(key), randname)] = true)
     end 
     # Find first true for each fix effect, aka level
-    level = mapslices(within, dims = 2) do fixef
-        findfirst(fixef)
-    end 
+    level = mapslices(findfirst, within, dims = 2)
     # Number of fix effects per level
-    nfixperlv = zeros(Int, length(ranef))
+    nfixperlv = zeros(Int, length(randname) + 1)
     for i in level
         nfixperlv[i] += 1
     end 
 
-    # dfᵢ = nobsᵢ - dfᵢ₋₁ - nfixᵢ
-    n0 = 1
-    n = nobs(model)
-    nobsperlv = (n0, length.(getproperty.(reterms, :levels))..., n) # number of random effects observation per level
-    ndiff = _diff(nobsperlv)
-    dfperlv = ndiff .- nfixperlv[2:end]
-    dfperlv = (last(dfperlv), dfperlv...)
+    # dfᵢ = ngroupᵢ - ngroupᵢᵢ₋₁ - nfixᵢ
+    ngroupperlv = (n0, length.(getproperty.(reterms, :levels))..., nobs(model)) # number of random effects observation per level
+    dfperlv = _diff(ngroupperlv) .- nfixperlv
 
     # Assign df to each factors based on the level
     assign = asgn(fixs)
-    offset = 0
-    intercept = first(assign) == 1
-    intercept || (offset = 1)
+    has_intercept(fixs) && popfirst!(assign)
+    offset = first(assign) - 1
     dfr = ntuple(last(assign) - offset) do i
-        dfperlv[level[findlast(==(i + offset), assign)]] # use the last one to avoid wrong assign of the first arguments
+        dfperlv[level[findfirst(==(i + offset), assign)]]
     end
-    df = dof(assign)
-    intercept || popfirst!(df)
-    tuple(df...), dfr
+    (last(dfperlv), dfr...)
 end
 
-@doc """
+dof_residual_pred(aovm::FullModel{<: LinearMixedModel}) = getindex.(Ref(dof_residual_pred(aovm.model)), aovm.pred_id)
+
+"""
     nestedmodels(model::LinearMixedModel; null::Bool = true, <keyword arguments>)
 
     nestedmodels(::Type{LinearMixedModel}, f::FormulaTerm, tbl; null::Bool = true, wts = [], contrasts = Dict{Symbol, Any}(), verbose::Bool = false, REML::Bool = false)
 
-Generate nested models from a model or formula and data.
+Generate nested models from a model or modeltype, formula and data.
 The null model will be an empty model if the keyword argument `null` is true (default).
 """
-nestedmodels(::Val{:AnovaMixedModels})
-
-nestedmodels(::Type{<: LinearMixedModel}, f::FormulaTerm, tbl; 
-                null::Bool = true, 
-                wts = [], 
-                contrasts = Dict{Symbol, Any}(), 
-                progress::Bool = true, 
-                REML::Bool = false) = 
-    nestedmodels(fit(LinearMixedModel, f, tbl; wts, contrasts, progress, REML); null)
-
-function nestedmodels(model::LinearMixedModel; null::Bool = true, kwargs...)
+function nestedmodels(model::M; null::Bool = true, kwargs...) where {M <: LinearMixedModel}
     f = formula(model)
     range = null ? (0:length(f.rhs[1].terms) - 1) : (1:length(f.rhs[1].terms) - 1)
     assign = asgn(first(f.rhs))
@@ -149,11 +125,19 @@ function nestedmodels(model::LinearMixedModel; null::Bool = true, kwargs...)
         fit!(lmm; REML, progress = true)
         lmm
     end
-    (models..., model)
+    NestedModels{M}(models..., model)
 end
+
+nestedmodels(::Type{<: LinearMixedModel}, f::FormulaTerm, tbl; 
+                null::Bool = true, 
+                wts = [], 
+                contrasts = Dict{Symbol, Any}(), 
+                progress::Bool = true, 
+                REML::Bool = false) = 
+    nestedmodels(fit(LinearMixedModel, f, tbl; wts, contrasts, progress, REML); null)
 
 # For nestedmodels
 isnullable(::LinearMixedModel) = true
 
 # Specialized dof_residual
-dof_residual(aov::AnovaResult{<: MixedModel, FTest}) = aov.tests.resdof
+dof_residual(aov::AnovaResult{<: FullModel{<: MixedModel}, FTest}) = aov.otherstat.dof_residual

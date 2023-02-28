@@ -1,5 +1,6 @@
 using AnovaMixedModels, CSV, DataFrames, CategoricalArrays
 using AnovaGLM: glm, lm 
+using AnovaMixedModels: dof_residual_pred
 using Test
 import Base.isapprox
 
@@ -38,7 +39,8 @@ transform!(anxiety, :id => categorical, renamecols = false)
 
 "Data from R package HSAUR2"
 toenail = CSV.read(joinpath(anova_datadir, "toenail.csv"), DataFrame)
-transform!(toenail, [1, 2, 3] .=> categorical, renamecols = false)
+transform!(toenail, [1, 3] .=> categorical, renamecols = false)
+transform!(toenail, 2 => ByRow(x -> x == "none or mild"), renamecols = false)
 
 # custimized approx
 isapprox(x::NTuple{N, Float64}, y::NTuple{N, Float64}, atol::NTuple{N, Float64} = x ./ 1000) where N = 
@@ -51,6 +53,7 @@ isapprox(x::NTuple{N, Float64}, y::NTuple{N, Float64}, atol::NTuple{N, Float64} 
             lmm2 = lme(@formula(gpa ~ occasion * sex + job + (1|student)), gpa)
             lmm3 = lme(@formula(gpa ~ occasion * sex * job + (1|student)), gpa)
             lme3 = anova_lme(@formula(score ~ group * time + (1|id)), anxiety, type = 3)
+            lme2 = anova_lme(@formula(gpa ~ occasion * sex + job + (1|student)), gpa, type = 2, REML = true)
             lme1 = anova_lme(LRT, @formula(score ~ group * time + (1|id)), anxiety)
             global aovf = anova(lmm1)
             global aovlr = anova(lmm1, lmm2, lmm3)
@@ -63,14 +66,15 @@ isapprox(x::NTuple{N, Float64}, y::NTuple{N, Float64}, atol::NTuple{N, Float64} 
             @test first(nobs(aovlr)) == nobs(lmm1)
             @test dof(aovf) == (1, 1, 1, 2)
             @test dof_residual(aovf) == (997, 997, 198, 997)
+            @test isapprox(teststat(lme2), (28731.976842989556, 635.1750307060438, 17.210623194472724, 46.16338718571525, 14.321381335479893))
             @test isapprox(teststat(aovf), (28899.81231026455, 714.3647106859062, 19.19804098862722, 45.425989531937134))
             @test isapprox(deviance(aovlr), tuple(lr.deviance...))
             @test isapprox(filter(!isnan, pval(aovlr)), tuple(lr.pvalues...))
-            @test lme3.model.optsum.REML 
-            @test !last(lme1.model).optsum.REML
-            @test coefnames(lmm2, Val(:anova)) == ["(Intercept)",  "occasion", "sex", "job", "occasion & sex"]
+            @test lme3.anovamodel.model.optsum.REML 
+            @test !last(lme1.anovamodel.model).optsum.REML
+            @test prednames(lmm2) == ["(Intercept)",  "occasion", "sex", "job", "occasion & sex"]
         end 
-        @testset "Random effect on slope and intercept" begin
+        @testset "Cross random effect on slope and intercept" begin
             lmm1 = lme(@formula(gpa ~ occasion + (1|student)), gpa, REML = true)
             lmm2 = lme(@formula(gpa ~ occasion + (occasion|student)), gpa, REML = true)
             lms = nestedmodels(LinearMixedModel, @formula(gpa ~ occasion + (1|student)), gpa, REML = true)
@@ -85,7 +89,7 @@ isapprox(x::NTuple{N, Float64}, y::NTuple{N, Float64}, atol::NTuple{N, Float64} 
             @test isapprox(deviance(aovlr), tuple(lr.deviance...))
             @test isapprox(filter(!isnan, pval(aovlr)), tuple(lr.pvalues...))
         end
-        @testset "Multiple random effects" begin
+        @testset "Nested random effects" begin
             lmm1 = lme(@formula(stress ~ age  + sex + experience + treatment + wardtype + hospsize + (1|hospital)), nurses)
             lmm2 = lme(@formula(stress ~ age  + sex + experience + treatment + wardtype + hospsize + (1|hospital/wardid)), nurses)
             global aov = anova(lmm1, lmm2)
@@ -93,6 +97,7 @@ isapprox(x::NTuple{N, Float64}, y::NTuple{N, Float64}, atol::NTuple{N, Float64} 
             @test !(@test_error test_show(aov))
             @test first(nobs(aov)) == nobs(lmm1)
             @test dof(aov) == tuple(lr.dof...)
+            @test dof_residual_pred(lmm2) == (897, 897, 897, 897, 73, 73, 22)
             @test isapprox(deviance(aov), tuple(lr.deviance...))
             @test isapprox(filter(!isnan, pval(aov)), tuple(lr.pvalues...))
         end
