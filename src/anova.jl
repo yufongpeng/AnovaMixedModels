@@ -48,9 +48,9 @@ function anova(::Type{FTest},
         aovm::FullModel{M};
         adjust_sigma::Bool = true) where {M <: LinearMixedModel}
 
-    f = formula(aovm.model)
     assign = asgn(predictors(aovm))
-    fullasgn = asgn(f.rhs[1])
+    fullpred = predictors(aovm.model)
+    fullasgn = asgn(fullpred)
     df = dof_asgn(assign)
     dfr = dof_residual_pred(aovm)
     # calculate degree of freedom for factors and residuals
@@ -68,7 +68,7 @@ function anova(::Type{FTest},
         end
     elseif aovm.type == 2
         fstat = ntuple(last(fullasgn) - offset) do fix
-            select1 = sort!(collect(select_super_interaction(f.rhs[1], fix + offset)))
+            select1 = sort!(collect(select_super_interaction(fullpred, fix + offset)))
             select2 = setdiff(select1, fix + offset)
             select1 = findall(in(select1), fullasgn)
             select2 = findall(in(select2), fullasgn)
