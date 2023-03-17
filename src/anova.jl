@@ -13,6 +13,7 @@ Return `AnovaResult{M, test, N}`. See [`AnovaResult`](@ref) for details.
     1. `LinearMixedModel` fitted by `AnovaMixedModels.lme` or `fit(LinearMixedModel, ...)`
     2. `GeneralizedLinearMixedModel` fitted by `AnovaMixedModels.glme` or `fit(GeneralizedLinearMixedModel, ...)`
     If mutiple models are provided, they should be nested and the last one is the most complex. The first model can also be the corresponding `GLM` object without random effects.
+* `anovamodel`: wrapped model objects; `FullModel` and `NestedModels`.
 * `test`: test statistics for goodness of fit. Available tests are [`LikelihoodRatioTest`](@ref) ([`LRT`](@ref)) and [`FTest`](@ref). The default is based on the model type.
     1. `LinearMixedModel`: `FTest` for one model; `LRT` for nested models.
     2. `GeneralizedLinearMixedModel`: `LRT` for nested models.
@@ -38,6 +39,15 @@ anova(models::Vararg{M};
         kwargs...) where {M <: MixedModel} = 
     anova(test, models...; kwargs...)
 
+anova(aovm::FullModel{M}; 
+        test::Type{<: GoodnessOfFit} = FTest, 
+        kwargs...) where {M <: MixedModel} = 
+    anova(test, aovm; kwargs...)
+
+anova(aovm::NestedModels{M}; 
+        test::Type{<: GoodnessOfFit} = LRT, 
+        kwargs...) where {M <: MixedModel} = 
+    anova(test, aovm; kwargs...)
 # ==================================================================================================================
 # ANOVA by F test
 # Linear mixed-effect models
@@ -108,6 +118,16 @@ function anova(::Type{LRT}, model::M) where {M <: LinearMixedModel}
         ArgumentError("""Likelihood-ratio tests for REML-fitted models are only valid when the fixed-effects specifications are identical"""))
     @warn "Fit all submodels"
     models = nestedmodels(model; null = isnullable(model))
+    anova(LRT, models)
+end
+
+function anova(::Type{LRT}, aovm::FullModel{M}) where {M <: LinearMixedModel}
+    # check if fitted by ML 
+    # nested random effects for REML ?
+    aovm.model.optsum.REML && throw(
+        ArgumentError("""Likelihood-ratio tests for REML-fitted models are only valid when the fixed-effects specifications are identical"""))
+    @warn "Fit all submodels"
+    models = nestedmodels(aovm.model; null = isnullable(aovm.model))
     anova(LRT, models)
 end
 
