@@ -2,7 +2,9 @@
 # Main API
 """
     anova(<mixedmodels>...; test::Type{<: GoodnessOfFit}, <keyword arguments>)
+    anova(<anovamodel>; test::Type{<: GoodnessOfFit}, <keyword arguments>)
     anova(test::Type{<: GoodnessOfFit}, <mixedmodels>...; <keyword arguments>)
+    anova(test::Type{<: GoodnessOfFit}, <anovamodel>; <keyword arguments>)
 
 Analysis of variance.
 
