@@ -50,6 +50,8 @@ isapprox(x::NTuple{N, Float64}, y::NTuple{N, Float64}, atol::NTuple{N, Float64} 
     @testset "LinearMixedModel" begin
         @testset "One random effect on intercept" begin
             lmm1 = lme(@formula(gpa ~ occasion + sex + job + (1|student)), gpa)
+            lms = nestedmodels(LinearMixedModel, @formula(gpa ~ occasion + sex + job + (1|student)), gpa)
+            lmf = FullModel(lmm1, 1, true, true)
             lmm2 = lme(@formula(gpa ~ occasion * sex + job + (1|student)), gpa)
             lmm3 = lme(@formula(gpa ~ occasion * sex * job + (1|student)), gpa)
             lme3 = anova_lme(@formula(score ~ group * time + (1|id)), anxiety, type = 3)
@@ -57,14 +59,18 @@ isapprox(x::NTuple{N, Float64}, y::NTuple{N, Float64}, atol::NTuple{N, Float64} 
             lme1 = anova_lme(LRT, @formula(score ~ group * time + (1|id)), anxiety)
             global aovf = anova(lmm1)
             global aovlr = anova(lmm1, lmm2, lmm3)
+            global aovn = anova(lms)
+            global aovff = anova(lmf)
+            global aovfl = anova(lmf; test = LRT)
             global aov3 = anova(lmm1, type = 3)
             lr = MixedModels.likelihoodratiotest(lmm1, lmm2, lmm3)
             @test !(@test_error test_show(aovf))
             @test !(@test_error test_show(aovlr))
             @test !(@test_error test_show(aov3))
+            @test length(aovfl.anovamodel.model) == 5
             @test anova_type(aov3) == 3
             @test first(nobs(aovlr)) == nobs(lmm1)
-            @test dof(aovf) == (1, 1, 1, 2)
+            @test dof(aovf) == dof(aovff)
             @test dof_residual(aovf) == (997, 997, 198, 997)
             @test isapprox(teststat(lme2), (28731.976842989556, 635.1750307060438, 17.210623194472724, 46.16338718571525, 14.321381335479893))
             @test isapprox(teststat(aovf), (28899.81231026455, 714.3647106859062, 19.19804098862722, 45.425989531937134))
@@ -77,7 +83,6 @@ isapprox(x::NTuple{N, Float64}, y::NTuple{N, Float64}, atol::NTuple{N, Float64} 
         @testset "Cross random effect on slope and intercept" begin
             lmm1 = lme(@formula(gpa ~ occasion + (1|student)), gpa, REML = true)
             lmm2 = lme(@formula(gpa ~ occasion + (occasion|student)), gpa, REML = true)
-            lms = nestedmodels(LinearMixedModel, @formula(gpa ~ occasion + (1|student)), gpa, REML = true)
             global aovlr = anova(lmm1, lmm2)
             global aovf = anova(lmm2)
             lr = MixedModels.likelihoodratiotest(lmm1, lmm2)
