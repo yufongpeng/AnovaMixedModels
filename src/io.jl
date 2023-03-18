@@ -12,7 +12,7 @@ function anovatable(aov::AnovaResult{<: FullModel{M}, FTest}; rownames = prednam
               rownames, 4, 3)
 end
 
-function anovatable(aov::AnovaResult{NestedModels{M, N}, LRT}; 
+function anovatable(aov::AnovaResult{MixedAovModels{M, N}, LRT}; 
                     rownames = string.(1:N)) where {M <: Union{GLM_MODEL, MixedModel}, N}
     if last(aov.anovamodel.model).optsum.REML 
         AnovaTable([

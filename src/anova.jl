@@ -63,7 +63,7 @@ function anova(::Type{FTest},
     assign = asgn(predictors(aovm))
     fullpred = predictors(aovm.model)
     fullasgn = asgn(fullpred)
-    df = dof_asgn(assign)
+    df = tuple(dof_asgn(assign)...)
     dfr = dof_residual_pred(aovm)
     # calculate degree of freedom for factors and residuals
     varβ = vcov(aovm.model) 
@@ -185,10 +185,10 @@ function anova(
     # isnested is not part of _iscomparable:  
     # isnested = true 
     dev = (_criterion(m0), deviance.(models[2:end])...)
-    lrt_nested(NestedModels{Union{M, T}}(models), df, dev, 1)
+    lrt_nested(MixedAovModels{Union{M, T}}(models), df, dev, 1)
 end
 
-anova(::Type{LikelihoodRatioTest}, aovm::NestedModels{M}) where {M <:  Union{GLM_MODEL, MixedModel}} = 
+anova(::Type{LikelihoodRatioTest}, aovm::MixedAovModels{M}) where {M <:  Union{GLM_MODEL, MixedModel}} = 
     lrt_nested(aovm, df = dof.(aovm.model), deviance_mixedmodel.(aovm.model), 1)
 
 # =================================================================================================================================
