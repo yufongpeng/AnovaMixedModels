@@ -154,12 +154,15 @@ isapprox(x::NTuple{N, Float64}, y::NTuple{N, Float64}, atol::NTuple{N, Float64} 
     end
     
     @testset "GeneralizedLinearModel and GeneralizedLinearMixedModel" begin
+        glm0 = glm(@formula(outcome ~ visit), toenail, Binomial(), LogitLink())
         glm1 = glm(@formula(outcome ~ visit + treatment), toenail, Binomial(), LogitLink())
         glmm1 = glme(@formula(outcome ~ visit + treatment + (1|patientID)), toenail, Binomial(), LogitLink(), nAGQ=20, wts = ones(Float64, size(toenail, 1)))
         glmm2 = glme(@formula(outcome ~ visit * treatment + (1|patientID)), toenail, Binomial(), LogitLink(), nAGQ=20, wts = ones(Float64, size(toenail, 1)))
         global aov = anova(glm1, glmm1, glmm2)
+        global aovg = anova(glm0, glm1)
         lr = MixedModels.likelihoodratiotest(glm1, glmm1, glmm2)
         @test !(@test_error test_show(aov))
+        @test !(@test_error test_show(aovg))
         @test first(nobs(aov)) == nobs(glmm1)
         @test dof(aov) == tuple(lr.dof...)
         @test isapprox(deviance(aov), tuple(lr.deviance...))
