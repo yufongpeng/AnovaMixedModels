@@ -24,7 +24,7 @@ function dof_residual_pred(model::LinearMixedModel)
     isempty(randoms) && (return repeat([nobs(model) - length(fixs.terms)], length(fixs.terms)))
     reterms = reverse(model.reterms) # Vector of ReMat
     fixname = collect(model.feterm.cnames) # fixef name
-    n0 = has_intercept(fixs) ? (popfirst!(fixname); 1) : 0
+    n0 = hasintercept(fixs) ? (popfirst!(fixname); 1) : 0
 
     # Determine affected fix effects for each random effects
     affectfixname = Dict{String, Set{String}}()

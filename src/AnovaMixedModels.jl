@@ -6,9 +6,9 @@ import StatsBase: fit!, fit
 import MixedModels: FeMat, createAL, reweight!, getθ,
                      _iscomparable, _criterion,
                      deviance, dof, dof_residual, nobs
-import StatsModels: RegressionModel, TableRegressionModel, vectorize, asgn
+import StatsModels: RegressionModel, TableRegressionModel, vectorize, asgn, hasintercept
 import AnovaBase: anova, nestedmodels, predictors, lrt_nested, _diff, subformula, dof_asgn,
-                    dof, dof_residual, deviance, nobs, prednames, has_intercept, select_super_interaction,
+                    dof, dof_residual, deviance, nobs, prednames, select_super_interaction,
                     AnovaTable, anovatable
 
 export anova_lme, lme, glme
