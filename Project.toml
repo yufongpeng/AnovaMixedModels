@@ -1,7 +1,7 @@
 name = "AnovaMixedModels"
 uuid = "6832ca0c-c2dd-4d0c-851a-521ca5db42f5"
 authors = ["Yu-Fong Peng <sciphypar@gmail.com>"]
-version = "0.2.2"
+version = "0.2.3"
 
 [deps]
 AnovaBase = "946dddda-6a23-4b48-8e70-8e60d9b8d680"
