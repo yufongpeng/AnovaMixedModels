@@ -80,10 +80,10 @@ function anova(::Type{FTest},
         end
     elseif aovm.type == 2
         fstat = ntuple(last(fullasgn) - offset) do fix
-            select1 = sort!(collect(select_super_interaction(fullpred, fix + offset)))
-            select2 = setdiff(select1, fix + offset)
-            select1 = findall(in(select1), fullasgn)
-            select2 = findall(in(select2), fullasgn)
+            s1 = sort!(collect(select_super_interaction(fullpred, fix + offset)))
+            s2 = setdiff(s1, fix + offset)
+            select1 = findall(in(s1), fullasgn)
+            select2 = findall(in(s2), fullasgn)
             (β[select1]' * (varβ[select1, select1] \ β[select1]) - β[select2]' * (varβ[select2, select2] \ β[select2])) / df[fix] * adjust
         end
     else 
@@ -97,7 +97,7 @@ function anova(::Type{FTest},
     pvalue = ntuple(lastindex(fstat)) do id
         ccdf(FDist(df[id], dfr[id]), abs(fstat[id]))
     end
-    AnovaResult{FTest}(aovm, df, ntuple(x->NaN, length(fstat)), fstat, pvalue, (dof_residual = dfr,))
+    AnovaResult(aovm, FTest, df, ntuple(x->NaN, length(fstat)), fstat, pvalue, (dof_residual = dfr,))
 end
 
 #=
@@ -148,7 +148,7 @@ function anova(::Type{LikelihoodRatioTest},
     ord = sortperm(collect(df))
     df = df[ord]
     models = models[ord]
-    lrt_nested(NestedModels{M}(models), df, deviance.(models), 1)
+    lrt_nested(NestedModels(models), df, deviance.(models), 1)
 end
 
 anova(::Type{LikelihoodRatioTest}, aovm::NestedModels{M}) where {M <: MixedModel} = 
@@ -185,7 +185,7 @@ function anova(
     # isnested is not part of _iscomparable:  
     # isnested = true 
     dev = (_criterion(m0), deviance.(models[2:end])...)
-    lrt_nested(MixedAovModels{Union{M, T}}(models), df, dev, 1)
+    lrt_nested(MixedAovModels{Union{M, T}, length(models)}(models), df, dev, 1)
 end
 
 anova(::Type{LikelihoodRatioTest}, aovm::MixedAovModels{M}) where {M <:  Union{GLM_MODEL, MixedModel}} = 

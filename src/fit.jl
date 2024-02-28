@@ -64,7 +64,7 @@ function dof_residual_pred(model::LinearMixedModel)
 
     # Assign df to each factors based on the level
     assign = asgn(fixs)
-    has_intercept(fixs) && popfirst!(assign)
+    hasintercept(fixs) && popfirst!(assign)
     offset = first(assign) - 1
     dfr = ntuple(last(assign) - offset) do i
         dfperlv[level[findfirst(==(i + offset), assign)]]
@@ -125,7 +125,7 @@ function nestedmodels(model::M; null::Bool = true, kwargs...) where {M <: Linear
         fit!(lmm; REML, progress = true)
         lmm
     end
-    NestedModels{M}(models..., model)
+    NestedModels(models..., model)
 end
 
 nestedmodels(::Type{<: LinearMixedModel}, f::FormulaTerm, tbl; 
